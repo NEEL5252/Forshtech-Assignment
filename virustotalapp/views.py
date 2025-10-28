@@ -35,22 +35,20 @@ def fetch_data_from_vt(endpoint_type: str, endpoint_value: str, file: str = None
 
     cache_key = f"vt_{endpoint_type}_{endpoint_value}"
 
-    ic(url)
     # Check if data is in cache
     cached = cache.get(cache_key)
     if cached:
-        ic("Cache hit")
         return cached, False
     
     # If not in cache, fetch from VirusTotal DB Records
     try:
+        
         record = VirusTotalReport.objects.get(
             endpoint_type = endpoint_type,
-            endpoint_value = endpoint_value,
-            file_scan = file if file else None,
+            endpoint_value = endpoint_value
         )
         cache.set(cache_key, record, timeout=CACHE_TTL)
-        return record.data, False
+        return record.full_data, False
     except VirusTotalReport.DoesNotExist:
         ic("Record not found in DB, fetching from VT API")
         
@@ -64,16 +62,26 @@ def fetch_data_from_vt(endpoint_type: str, endpoint_value: str, file: str = None
     if resp.status_code == 200:
         data = resp.json()
         # Save to DB
+        
+        if file:
+            analysis_link = data.get("data", {}).get("links", {}).get("self", "")
+            file_analysis_resp = requests.get(analysis_link, headers=HEADERS)
+            if file_analysis_resp.status_code == 200:
+                data = file_analysis_resp.json()
+            else:
+                raise Exception(f"VT API error while fetching file analysis: {file_analysis_resp.status_code}, {file_analysis_resp.text}")
+
         VirusTotalReport.objects.create(
             endpoint_type = endpoint_type,
-            endpoint_value = endpoint_value
+            endpoint_value = endpoint_value,
+            file_scan = file if file else None,
+            full_data = data
         )
 
         # Cache the response
         cache.set(cache_key, data, timeout=CACHE_TTL)
         return data, True
     else:
-        ic(resp.text)
         raise Exception(f"VT API error: {resp.status_code}, {resp.text}")
     
 
@@ -81,7 +89,6 @@ def fetch_data_from_vt(endpoint_type: str, endpoint_value: str, file: str = None
 def get_virustotal_report(request):
     if request.method == "POST":
         data = request.data
-        ic(data)
         endpoint_type = data.get('endpoint_type', None)
         endpoint_value = data.get('endpoint_value', None)
         files = request.FILES.get('file', None)
@@ -110,3 +117,23 @@ def get_virustotal_report(request):
             "files"
         ]
         return Response({"endpoint_types": endpoint_types})
+    
+
+@api_view(['POST'])
+def refresh_data(request, endpoint_type, endpoint_value : str = None):
+    data = request.data
+    file = request.FILES.get('file', None)
+    # Re-ingest the data from VirusTotal API and update DB & Cache
+    try:
+        if file:
+            endpoint_value = compute_file_hash(file)
+            
+        cache_key = f"vt_{endpoint_type}_{endpoint_value}"
+        VirusTotalReport.objects.filter(endpoint_type=endpoint_type, endpoint_value=endpoint_value).delete()
+        cache.delete(cache_key)
+
+        data, _ = fetch_data_from_vt(endpoint_type, endpoint_value, file=file if file else None)
+        return Response({"status": "refreshed", "data": data})
+    
+    except Exception as e:
+        return Response({"error": str(e)}, status.HTTP_500_INTERNAL_SERVER_ERROR)
