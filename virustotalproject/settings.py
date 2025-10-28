@@ -140,3 +140,13 @@ STATIC_URL = "static/"
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 MEDIA_URL = "/"
+
+
+# REST_FRAMEWORK = {
+#     'DEFAULT_THROTTLE_CLASSES': [
+#         'rest_framework.throttling.AnonRateThrottle',   
+#     ],
+#     'DEFAULT_THROTTLE_RATES': {
+#         'anon': '4/minute',
+#     }
+# }

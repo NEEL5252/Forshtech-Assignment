@@ -1,12 +1,13 @@
 from .models import *
-import requests, os, hashlib
+import requests, os, hashlib, json
 
 from django.conf import settings
 from django.core.cache import cache
 from dotenv import load_dotenv
 load_dotenv()
 from rest_framework.response import Response
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, throttle_classes
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework import status
 from icecream import ic
 VT_API_KEY = os.getenv("API_KEY")
@@ -26,7 +27,6 @@ def compute_file_hash(file):
     return hash_sha256.hexdigest()
 
 def fetch_data_from_vt(endpoint_type: str, endpoint_value: str, file: str = None):
-
     if file is None:
         url = f"{BASE_URL}/{endpoint_type}/{endpoint_value}"
     else:
@@ -62,7 +62,6 @@ def fetch_data_from_vt(endpoint_type: str, endpoint_value: str, file: str = None
     if resp.status_code == 200:
         data = resp.json()
         # Save to DB
-        
         if file:
             analysis_link = data.get("data", {}).get("links", {}).get("self", "")
             file_analysis_resp = requests.get(analysis_link, headers=HEADERS)
@@ -75,7 +74,7 @@ def fetch_data_from_vt(endpoint_type: str, endpoint_value: str, file: str = None
             endpoint_type = endpoint_type,
             endpoint_value = endpoint_value,
             file_scan = file if file else None,
-            full_data = data
+            full_data = data 
         )
 
         # Cache the response
@@ -86,6 +85,7 @@ def fetch_data_from_vt(endpoint_type: str, endpoint_value: str, file: str = None
     
 
 @api_view(['POST', "GET"])
+@throttle_classes([AnonRateThrottle])
 def get_virustotal_report(request):
     if request.method == "POST":
         data = request.data
@@ -120,6 +120,7 @@ def get_virustotal_report(request):
     
 
 @api_view(['POST'])
+@throttle_classes([AnonRateThrottle])
 def refresh_data(request, endpoint_type, endpoint_value : str = None):
     data = request.data
     file = request.FILES.get('file', None)
@@ -127,7 +128,7 @@ def refresh_data(request, endpoint_type, endpoint_value : str = None):
     try:
         if file:
             endpoint_value = compute_file_hash(file)
-            
+
         cache_key = f"vt_{endpoint_type}_{endpoint_value}"
         VirusTotalReport.objects.filter(endpoint_type=endpoint_type, endpoint_value=endpoint_value).delete()
         cache.delete(cache_key)
