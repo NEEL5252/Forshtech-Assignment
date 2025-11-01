@@ -42,7 +42,6 @@ def fetch_data_from_vt(endpoint_type: str, endpoint_value: str, file: str = None
     
     # If not in cache, fetch from VirusTotal DB Records
     try:
-        
         record = VirusTotalReport.objects.get(
             endpoint_type = endpoint_type,
             endpoint_value = endpoint_value
@@ -119,22 +118,27 @@ def get_virustotal_report(request):
         return Response({"endpoint_types": endpoint_types})
     
 
-@api_view(['POST'])
-@throttle_classes([AnonRateThrottle])
-def refresh_data(request, endpoint_type, endpoint_value : str = None):
-    data = request.data
-    file = request.FILES.get('file', None)
-    # Re-ingest the data from VirusTotal API and update DB & Cache
-    try:
-        if file:
-            endpoint_value = compute_file_hash(file)
+# @api_view(['POST'])
+# @throttle_classes([AnonRateThrottle])
+# def refresh_data(request, endpoint_type, endpoint_value : str = None):
+#     data = request.data
+#     file = request.FILES.get('file', None)
+#     # Re-ingest the data from VirusTotal API and update DB & Cache
+#     try:
+#         if file:
+#             endpoint_value = compute_file_hash(file)
 
-        cache_key = f"vt_{endpoint_type}_{endpoint_value}"
-        VirusTotalReport.objects.filter(endpoint_type=endpoint_type, endpoint_value=endpoint_value).delete()
-        cache.delete(cache_key)
+#         cache_key = f"vt_{endpoint_type}_{endpoint_value}"
+#         VirusTotalReport.objects.filter(endpoint_type=endpoint_type, endpoint_value=endpoint_value).delete()
+#         cache.delete(cache_key)
 
-        data, _ = fetch_data_from_vt(endpoint_type, endpoint_value, file=file if file else None)
-        return Response({"status": "refreshed", "data": data})
+#         data, _ = fetch_data_from_vt(endpoint_type, endpoint_value, file=file if file else None)
+#         return Response({"status": "refreshed", "data": data})
     
-    except Exception as e:
-        return Response({"error": str(e)}, status.HTTP_500_INTERNAL_SERVER_ERROR)
+#     except Exception as e:
+#         return Response({"error": str(e)}, status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+def get_virustotal_report_data(request):
+    reports = VirusTotalReport.objects.all().order_by('-created_at').values()
+    return Response(reports, status=status.HTTP_200_OK)
