@@ -40,7 +40,11 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "virustotalapp",
     "rest_framework",
-    
+    "celery",
+    "redis",
+    "django_redis",
+    "django_celery_beat",
+    "django_celery_results",
 ]
 
 MIDDLEWARE = [
@@ -150,3 +154,20 @@ REST_FRAMEWORK = {
         'anon': '4/minute',
     }
 }
+
+
+
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+CELERY_BROKER_URL = 'redis://localhost:6379/0'  # or RabbitMQ or another broker
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+accept_content = ['application/json']
+result_serializer = 'json'
+task_serializer = 'json'
+result_backend = 'django-db'
+CELERY_TASK_DEFAULT_QUEUE = 'skyinc_queue'
+CELERY_RESULT_BACKEND = "django-db"  # Store results in the database
+CELERY_TASK_TRACK_STARTED = True  # Track task execution status
+# broker_connection_retry_on_startup = True
+CELERY_TASK_TIME_LIMIT = 30 * 60
+CELERY_TIMEZONE = 'UTC'
